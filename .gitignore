@@ -1,0 +1,16 @@
+# byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# mac files
+.DS_Store
+
+# povary
+povray-tutorial
+*.ini
+*.pov
+*.png
+
+# current projects
+projects
