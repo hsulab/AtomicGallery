@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import os 
+import warnings
 
 import argparse
+
+import json
 
 import numpy as np
 norm = np.linalg.norm
@@ -25,12 +28,8 @@ description="""
 How to plot atoms with PovRay.
 """
 
-element_radius = {
-    'C': 0.5, 'H':0.4, 'O': 0.5, 'Al': 0.75, 'Si': 0.75, 'Cu': 0.85, 
-    'Zn': 1.00, 'Cr': 1.00, 'Cd': 1.00
-}
 
-def write_pov_png(atoms, rot, sbox, povname):
+def write_pov_png(atoms, povname, params):
     # running index for the bonds 
     natoms = len(atoms)
 
@@ -46,6 +45,56 @@ def write_pov_png(atoms, rot, sbox, povname):
     #            atom_list.append(i)
     #atoms = atoms[atom_list]
 
+
+    # check custom radii
+    custom_radii = []
+
+    radii = params.pop('atom_radii', None)
+    if radii:
+        for sym in atoms.get_chemical_symbols():
+            if sym in radii.keys():
+                custom_radii.append(radii[sym])
+            else:
+                warnings.warn('No %s in custom radii and use default 1.0 radius.' %sym, RuntimeWarning)
+                custom_radii.append(1.0)
+    else:
+        custom_radii = [1.0 for at in atoms]
+
+    print(custom_radii)
+
+    # colors 
+    custom_colors = []
+
+    colors = params.pop('colors', None)
+    if colors:
+        for sym in atoms.get_chemical_symbols():
+            if sym in colors.keys():
+                custom_colors.append(colors[sym])
+            else:
+                warnings.warn('No %s in custom color and use default.' %sym, RuntimeWarning)
+                custom_radii.append(None)
+    else:
+        custom_colors = None
+
+    # rotation
+    custom_rot = '{}x,{}y,{}z'.format(*params['rotation']) # using ag: 'view -> rotate'
+
+    # bond pairs 
+    bond_radius = params.pop('bond_times', 1.0)
+    bondpairs = get_bondpairs(atoms, radius=bond_radius)
+    #print(bondpairs)
+
+    high_order_bonds = params.pop('high_order_bonds', None)
+    if high_order_bonds:
+        high_bondorder_pairs = {}
+        for key, value in high_order_bonds.items():
+            new_key = key.split('-')
+            high_bondorder_pairs[(int(new_key[0]),int(new_key[1]))] = value
+        #print(high_bondorder_pairs)
+        bondpairs = set_high_bondorder_pairs(bondpairs, high_bondorder_pairs)
+
+    custom_bondwidth = params.pop('bond_width', 0.2)
+
     ## C-C triple bond
     #high_bondorder_pairs = {}
     #for i, atom in enumerate(atoms):
@@ -56,28 +105,11 @@ def write_pov_png(atoms, rot, sbox, povname):
     #                    print(i,j)
     #                    high_bondorder_pairs[(i,j)] = ((0, 0, 0), 3, (0.15, 0.15, 0))
 
-    ## radii
-    rad = [element_radius[at.symbol] for at in atoms]
-
-    #for i, atom in enumerate(atoms):
-    #    if atom.symbol != 'C' and atom.symbol != 'H':
-    #        if norm(atom.position-cu_pos) > 3.5:
-    #            rad[i] = 0.01
-
-    # bond
-    bondpairs = get_bondpairs(atoms, radius=0.9)
-    #bondpairs = set_high_bondorder_pairs(bondpairs, high_bondorder_pairs)
-
     # set textures 
     textures = []
     for a in atoms:
         textures.append('ase3')
 
-    elem_color = {
-        'Zn': (0.49,0.50,0.69), 
-        'Cr': (0.49,0.50,0.69), 
-        'O': (1,0.05,0.05), 
-    }
     #colors = []
     #for sym in atoms.get_chemical_symbols():
     #    colors.append(elem_color[sym])
@@ -85,13 +117,13 @@ def write_pov_png(atoms, rot, sbox, povname):
     
     # Common kwargs for eps, png, pov
     kwargs = {
-        'rotation'      : rot, # text string with rotation (default='' )
-        'radii'         : rad, # float, or a list with one float per atom
-        'colors'        : colors,# List: one (r, g, b) tuple per atom
-        'show_unit_cell': sbox,   # 0, 1, or 2 to not show, show, and show all of cell
+        'rotation'      : custom_rot, # text string with rotation (default='' )
+        'radii'         : custom_radii, # float, or a list with one float per atom
+        'colors'        : custom_colors,# List: one (r, g, b) tuple per atom
+        'show_unit_cell': params['show_box'],   # 0, 1, or 2 to not show, show, and show all of cell
         'celllinewidth' : 0.2,  # Radius of the cylinders representing the cell
         'bondatoms'     : bondpairs, # list of tuples 
-        # 'bondlinewidth' : 0.2, # linewidth of bond 
+        'bondlinewidth' : custom_bondwidth, # linewidth of bond 
         'textures'      : textures, # Length of atoms list of texture names
         }
     
@@ -121,28 +153,33 @@ def write_pov_png(atoms, rot, sbox, povname):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=description)
+
+    # positions
+    parser.add_argument('params', default='params.json', \
+            help='parameter file')
+
+    # options
     parser.add_argument('-v', '--version', action='version', version='%(prog)s 1.0')
     parser.add_argument('-p', '--pos', nargs='?', default='POSCAR.vasp', \
             help='POSCAR File')
-    parser.add_argument('-r', '--rot', nargs=3, default=[0,0,0], \
-            type=int, help='rotation of image')
-    parser.add_argument('-sb', '--showbox', default=0, \
-            type=int, help='showbox')
-    parser.add_argument('-vis', '--view', default=False, \
-            type=bool, help='if view the structure')
+    parser.add_argument('-d', '--display', action='store_true', \
+            help='if view the structure')
 
     args = parser.parse_args()
 
     # setting
-    # vaspfile = 'CdS-opt.vasp'
-    vaspfile = args.pos
-    name, ext = os.path.splitext(os.path.basename(vaspfile))
-    rot = '{}x,{}y,{}z'.format(*args.rot) # found using ag: 'view -> rotate'
+    pos_file = args.pos
+    name, ext = os.path.splitext(os.path.basename(pos_file))
+
+    with open(args.params, 'r') as reader:
+        params = json.load(reader)
+
+    #print(params)
 
     # render
-    atoms = read(vaspfile) # 
-    print(atoms)
-    if args.view:
+    atoms = read(pos_file) # 
+    #print(atoms)
+    if args.display:
         view(atoms)
     else:
-        write_pov_png(atoms, rot, args.showbox, name)
+        write_pov_png(atoms, name, params)
