@@ -33,18 +33,9 @@ def write_pov_png(atoms, povname, params):
     # running index for the bonds 
     natoms = len(atoms)
 
-    # check 
-    #atom_list = []
-    #cu_pos = np.array([7.8,7.0,6.4])
-    #for i, atom in enumerate(atoms):
-    #    if norm(atom.position-cu_pos) < 9.0:
-    #        if atom.symbol != 'C' and atom.symbol != 'H':
-    #            atom_list.append(i)
-    #    if norm(atom.position-cu_pos) < 4.5:
-    #        if atom.symbol == 'C' or atom.symbol == 'H':
-    #            atom_list.append(i)
-    #atoms = atoms[atom_list]
-
+    # check pbc
+    custom_pbc = params.pop('pbc', [0,0,0])
+    atoms.pbc = custom_pbc
 
     # check custom radii
     custom_radii = []
@@ -59,8 +50,6 @@ def write_pov_png(atoms, povname, params):
                 custom_radii.append(1.0)
     else:
         custom_radii = [1.0 for at in atoms]
-
-    print(custom_radii)
 
     # colors 
     custom_colors = []
@@ -95,33 +84,22 @@ def write_pov_png(atoms, povname, params):
 
     custom_bondwidth = params.pop('bond_width', 0.2)
 
-    ## C-C triple bond
-    #high_bondorder_pairs = {}
-    #for i, atom in enumerate(atoms):
-    #    if atom.symbol == 'C':
-    #        for j in range(i+1,len(atoms)):
-    #            if atoms[j].symbol == 'C':
-    #                if norm(atoms[i].position-atoms[j].position) < 1.3:
-    #                    print(i,j)
-    #                    high_bondorder_pairs[(i,j)] = ((0, 0, 0), 3, (0.15, 0.15, 0))
-
     # set textures 
     textures = []
     for a in atoms:
         textures.append('ase3')
 
-    #colors = []
-    #for sym in atoms.get_chemical_symbols():
-    #    colors.append(elem_color[sym])
-    colors = None
+    # box
+    custom_showbox = params.pop('show_box', 0)
+    custom_boxlinewidth = params.pop('box_linewidth', 0.1)
     
     # Common kwargs for eps, png, pov
     kwargs = {
         'rotation'      : custom_rot, # text string with rotation (default='' )
         'radii'         : custom_radii, # float, or a list with one float per atom
         'colors'        : custom_colors,# List: one (r, g, b) tuple per atom
-        'show_unit_cell': params['show_box'],   # 0, 1, or 2 to not show, show, and show all of cell
-        'celllinewidth' : 0.2,  # Radius of the cylinders representing the cell
+        'show_unit_cell': custom_showbox,   # 0, 1, or 2 to not show, show, and show all of cell
+        'celllinewidth' : custom_boxlinewidth,  # Radius of the cylinders representing the cell
         'bondatoms'     : bondpairs, # list of tuples 
         'bondlinewidth' : custom_bondwidth, # linewidth of bond 
         'textures'      : textures, # Length of atoms list of texture names
@@ -151,6 +129,8 @@ def write_pov_png(atoms, povname, params):
 
     print('Write pov to png.')
 
+    return
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=description)
 
@@ -174,10 +154,9 @@ if __name__ == '__main__':
     with open(args.params, 'r') as reader:
         params = json.load(reader)
 
-    #print(params)
-
     # render
     atoms = read(pos_file) # 
+
     #print(atoms)
     if args.display:
         view(atoms)
